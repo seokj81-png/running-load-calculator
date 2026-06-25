@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>러닝 강도·피로 계산기 (사진 자동입력) · PAFGYM</title>
+<style>
+  :root{
+    --ink:#15212e; --muted:#5b6b7a; --line:#e5e9ee; --bg:#f4f6f8; --card:#fff;
+    --accent:#1d4ed8; --accent-weak:#eaf0ff;
+    --ok:#15803d; --ok-bg:#e9f7ee; --warn:#b45309; --warn-bg:#fdf3e7; --bad:#b91c1c; --bad-bg:#fcebea;
+    --radius:16px; --shadow:0 1px 2px rgba(20,33,46,.06),0 6px 24px rgba(20,33,46,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+       color:var(--ink); background:var(--bg); line-height:1.5; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:780px; margin:0 auto; padding:20px 16px 64px}
+  .brand{font-size:12px; font-weight:800; letter-spacing:.14em; color:var(--accent); text-transform:uppercase}
+  h1{font-size:24px; font-weight:800; margin:6px 0 6px; letter-spacing:-.02em}
+  .lede{color:var(--muted); font-size:14.5px; margin:0}
+  .lede b{color:var(--ink)}
+  .hint{margin-top:11px; font-size:13px; color:var(--muted); background:#eef6ff; border:1px solid #d6e6ff; border-radius:10px; padding:9px 12px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; margin-top:16px}
+  .step{font-size:12px; font-weight:800; color:var(--accent); letter-spacing:.04em; text-transform:uppercase; margin-bottom:8px}
+  h2{font-size:18px; margin:0 0 4px; font-weight:800}
+  .sub{color:var(--muted); font-size:13.5px; margin:0 0 12px}
+
+  /* 용어 */
+  .term{color:var(--accent); border-bottom:1px dotted var(--accent); cursor:pointer; font-weight:600}
+
+  /* 모드 토글 (일반인/전문가) */
+  .modebar{display:flex; gap:6px; margin-top:14px; background:#eaedf1; padding:5px; border-radius:13px}
+  .modebtn{flex:1; border:none; background:transparent; color:var(--muted); font-weight:800; font-size:14.5px; padding:11px 8px; border-radius:9px; cursor:pointer; transition:.12s}
+  .modebtn[aria-pressed="true"]{background:#fff; color:var(--ink); box-shadow:var(--shadow)}
+  .modebtn small{display:block; font-weight:600; font-size:11px; color:var(--muted); margin-top:2px}
+  .expert-only{display:none}
+  body.mode-expert .expert-only{display:block}
+
+  /* upload */
+  .drop{border:2px dashed #c4cfda; border-radius:14px; padding:24px 16px; text-align:center; background:#fbfcfe; cursor:pointer; transition:.15s}
+  .drop.drag{border-color:var(--accent); background:var(--accent-weak)}
+  .drop .big{font-size:15px; color:var(--ink); font-weight:700; margin:0 0 4px}
+  .drop p{margin:4px 0; color:var(--muted); font-size:13px}
+  #preview{max-width:100%; max-height:240px; border-radius:10px; margin-top:12px; display:none; border:1px solid var(--line)}
+  .ocrbar{display:none; margin-top:12px; font-size:13px; color:var(--muted)}
+  .ocrbar .track{height:8px; background:#eef1f4; border-radius:99px; overflow:hidden; margin-top:6px}
+  .ocrbar .fill{height:100%; width:0%; background:var(--accent); transition:width .2s}
+
+  .grid{display:grid; gap:12px}
+  .g2{grid-template-columns:1fr 1fr} .g3{grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:520px){.g2,.g3{grid-template-columns:1fr 1fr}}
+  label.f{display:block; font-size:12.5px; font-weight:700; margin-bottom:5px}
+  label.f span{font-weight:500; color:var(--muted); font-size:11.5px}
+  input{width:100%; border:1.5px solid var(--line); border-radius:10px; padding:10px 11px; font-size:16px; background:#fcfdfe; color:var(--ink); font-variant-numeric:tabular-nums}
+  input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak)}
+  .sectlabel{font-size:12px; font-weight:800; color:var(--muted); margin:16px 0 8px; text-transform:uppercase; letter-spacing:.03em}
+  button.go{margin-top:14px; width:100%; border:none; background:var(--ink); color:#fff; font-size:15.5px; font-weight:800; padding:14px; border-radius:12px; cursor:pointer}
+  button.go:active{transform:translateY(1px)}
+  .baserunner{margin-top:10px; font-size:12px; color:var(--muted); background:var(--accent-weak); border:1px solid #dbe5ff; border-radius:12px; padding:9px 12px}
+
+  /* tabs */
+  nav.tabs{display:flex; gap:6px; overflow-x:auto; margin:6px -16px 0; padding:0 16px 2px; -webkit-overflow-scrolling:touch; scrollbar-width:none}
+  nav.tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto; border:1px solid var(--line); background:var(--card); color:var(--muted); font-weight:700; font-size:13.5px; padding:9px 13px; border-radius:999px; cursor:pointer; white-space:nowrap; transition:.15s}
+  .tab[aria-selected="true"]{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .panel{display:none} .panel.active{display:block}
+  .panel h3{font-size:17px; margin:0 0 2px; font-weight:800}
+  .filled{outline:2px solid #bcd0ff; background:#f3f7ff}
+  .result{margin-top:16px; border-top:1px dashed var(--line); padding-top:16px}
+  .bignum{font-size:38px; font-weight:800; letter-spacing:-.02em; line-height:1.05}
+  .bignum small{font-size:15px; font-weight:700; color:var(--muted); margin-left:4px}
+  .sideval{color:var(--muted); font-size:13.5px; margin-top:4px}
+  .verdict{display:inline-flex; align-items:center; gap:7px; margin-top:13px; padding:9px 14px; border-radius:11px; font-weight:800; font-size:14.5px}
+  .verdict .dot{width:9px;height:9px;border-radius:50%}
+  .v-ok{background:var(--ok-bg);color:var(--ok)} .v-ok .dot{background:var(--ok)}
+  .v-warn{background:var(--warn-bg);color:var(--warn)} .v-warn .dot{background:var(--warn)}
+  .v-bad{background:var(--bad-bg);color:var(--bad)} .v-bad .dot{background:var(--bad)}
+  .explain{margin-top:12px; font-size:13px; color:var(--muted)} .explain b{color:var(--ink)}
+  .formula{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:var(--accent); background:var(--accent-weak); border-radius:8px; padding:3px 7px; display:inline-block}
+  .src{margin-top:10px; font-size:11.5px; color:#92a0ad}
+  .acwr-box{margin-top:16px; background:#fafbfc; border:1px solid var(--line); border-radius:12px; padding:14px}
+  .acwr-box h4{font-size:13.5px; margin:0 0 4px; font-weight:800}
+  .acwr-box p{font-size:12px; color:var(--muted); margin:0 0 10px}
+
+  /* program */
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  @media(max-width:520px){.metrics{grid-template-columns:1fr 1fr}}
+  .metric{background:#fafbfc; border:1px solid var(--line); border-radius:12px; padding:12px}
+  .metric .k{font-size:11.5px; color:var(--muted); font-weight:700}
+  .metric .v{font-size:21px; font-weight:800; margin-top:2px} .metric .v small{font-size:12px;color:var(--muted);font-weight:700}
+  table.plan{width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; background:var(--card); border-radius:12px; overflow:hidden; border:1px solid var(--line)}
+  table.plan th,table.plan td{text-align:left; padding:10px 11px; border-bottom:1px solid var(--line); vertical-align:top}
+  table.plan th{background:var(--ink); color:#fff; font-weight:700; font-size:12px}
+  table.plan td:first-child{font-weight:800; white-space:nowrap}
+  table.plan tr:last-child td{border-bottom:none}
+  .tag{display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:99px}
+  .t-easy{background:var(--ok-bg);color:var(--ok)} .t-hard{background:var(--bad-bg);color:var(--bad)} .t-mod{background:var(--warn-bg);color:var(--warn)} .t-rest{background:#eef1f4;color:var(--muted)}
+  ul.cautions{margin:10px 0 0; padding-left:18px; font-size:13px; color:var(--muted)} ul.cautions li{margin-bottom:5px} ul.cautions b{color:var(--ink)}
+
+  .ref h2{font-size:16px; font-weight:800; margin:0 0 10px}
+  table.thresh{width:100%; border-collapse:collapse; font-size:12.5px; background:var(--card); border-radius:12px; overflow:hidden; box-shadow:var(--shadow)}
+  table.thresh th,table.thresh td{text-align:left; padding:9px 11px; border-bottom:1px solid var(--line)}
+  table.thresh th{background:var(--ink); color:#fff; font-weight:700} table.thresh td:first-child{font-weight:700}
+  table.thresh tr:last-child td{border-bottom:none}
+  .note{margin-top:14px; font-size:12px; color:var(--muted); background:#fff8ec; border:1px solid #f3e2c2; border-radius:12px; padding:12px}
+  footer{margin-top:24px; text-align:center; font-size:11.5px; color:#9aa7b3; line-height:1.7}
+
+  /* 용어 설명 팝업 */
+  #glossOverlay{position:fixed; inset:0; background:rgba(20,33,46,.4); display:none; z-index:50}
+  #glossSheet{position:fixed; left:50%; bottom:0; transform:translateX(-50%); width:100%; max-width:520px; background:#fff;
+              border-radius:18px 18px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,.18); padding:22px 22px 28px; display:none; z-index:51}
+  #glossSheet .gtitle{font-size:18px; font-weight:800; margin:0 0 8px}
+  #glossSheet .gdesc{font-size:15px; color:var(--muted); line-height:1.7; margin:0}
+  #glossSheet .ghow{margin-top:14px; font-size:14px; color:var(--ink); background:var(--accent-weak); border:1px solid #d6e6ff; border-radius:12px; padding:13px 15px; line-height:1.65; display:none}
+  #glossSheet .ghow b{color:var(--accent)}
+  #glossClose{margin-top:18px; width:100%; border:none; background:var(--ink); color:#fff; font-weight:800; font-size:15px; padding:13px; border-radius:12px; cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">PAFGYM · 러닝 도구</div>
+  <h1>러닝 강도·피로 계산기</h1>
+  <p class="lede">같은 거리라도 빠르게 달리면 몸이 받는 부담이 다릅니다. <b>러닝 앱 기록 사진을 올리면</b> 숫자가 자동으로 채워지고, 오늘 운동이 <b>너무 셌는지</b> 알려주고 다음 7일 운동 계획을 제안합니다.</p>
+  <div class="hint">💡 <b>파란 밑줄</b> 친 단어를 누르면 쉬운 설명이 나와요.</div>
+
+  <div class="modebar" role="tablist">
+    <button class="modebtn" id="mode-easy" aria-pressed="true">🙂 일반인 버전<small>사진만 올리면 끝</small></button>
+    <button class="modebtn" id="mode-pro" aria-pressed="false">📊 전문가 버전<small>5가지 방법 직접 계산</small></button>
+  </div>
+
+  <!-- STEP 1: 사진 자동입력 -->
+  <div class="card">
+    <div class="step">🙂 일반인 버전 · 사진으로 간편하게</div>
+    <h2>러닝 기록 화면 사진</h2>
+    <p class="sub">가민·스트라바·애플워치·나이키 등 운동 요약 화면. 사진이 없으면 아래 칸에 직접 적어도 됩니다.</p>
+    <div class="drop" id="drop">
+      <p class="big">📷 사진을 끌어다 놓거나 눌러서 선택</p>
+      <p>거리 · 시간 · 평균 속도 · 심박 · 출력 · 걸음수가 보일수록 정확</p>
+      <input type="file" id="file" accept="image/*" capture="environment" hidden />
+    </div>
+    <img id="preview" alt="preview" />
+    <div class="ocrbar" id="ocrbar">사진에서 숫자 읽는 중… <span id="ocrpct">0%</span><div class="track"><div class="fill" id="ocrfill"></div></div></div>
+
+    <div class="sectlabel">읽어온 값 (확인하고 틀리면 고치기)</div>
+    <div class="grid g3">
+      <div><label class="f">거리 <span>(km)</span></label><input type="number" id="dist" step="0.1" placeholder="10.2" /></div>
+      <div><label class="f">시간 <span>(분)</span></label><input type="number" id="dur" step="1" placeholder="56" /></div>
+      <div><label class="f">평균 속도(페이스) <span>(분:초/km)</span></label><input type="text" id="pace" placeholder="5:30" /></div>
+      <div><label class="f">평균 심박 <span class="term" data-t="bpm">bpm</span></label><input type="number" id="hr" step="1" placeholder="152" /></div>
+      <div><label class="f">평균 <span class="term" data-t="power">출력(파워)</span> <span>(와트)</span></label><input type="number" id="pw" step="1" placeholder="245" /></div>
+      <div><label class="f"><span class="term" data-t="spm">걸음수(케이던스)</span></label><input type="number" id="cad" step="1" placeholder="176" /></div>
+    </div>
+    <button class="go" id="apply">이 값으로 계산하고 운동 계획 만들기 →</button>
+  </div>
+
+  <!-- 내 기준값 -->
+  <div class="card">
+    <div class="step">내 기준값 (모르면 그대로 두세요)</div>
+    <div class="grid g3">
+      <div><label class="f"><span class="term" data-t="threshold">역치 속도</span> <span>(분:초/km)</span></label><input type="text" id="thr" value="4:00" /></div>
+      <div><label class="f"><span class="term" data-t="maxhr">최대 심박</span> <span>(bpm)</span></label><input type="number" id="maxhr" value="190" /></div>
+      <div class="expert-only"><label class="f"><span class="term" data-t="cp">버틸 수 있는 출력</span> <span>(CP, 와트)</span></label><input type="number" id="cp" value="300" /></div>
+      <div class="expert-only"><label class="f"><span class="term" data-t="wprime">여분 에너지</span> <span>(W′, kJ)</span></label><input type="number" id="wprime" value="15" /></div>
+    </div>
+    <div class="baserunner">잘 모르는 값은 <b>그대로 두고 진행</b>해도 됩니다. 정확히 알수록 결과가 정밀해집니다.</div>
+  </div>
+
+  <!-- 5지표 계산기 -->
+  <div class="card expert-only">
+    <div class="step">📊 전문가 버전 · 5가지 방법으로 직접 계산</div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-tab="srpe">① 체감 강도</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="trimp">② 심박 부하</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="tss">③ 페이스 점수</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="power">④ 출력(파워)</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="poldist">⑤ 강도 분포</button>
+    </nav>
+
+    <section class="panel active" id="srpe">
+      <div class="result" style="border:0;padding-top:14px">
+        <h3>① 체감 강도 부하 <span class="term" data-t="srpe">(sRPE)</span></h3>
+        <p class="sub">"얼마나 힘들었나" × 시간. (사진을 올리면 심박으로 자동 추정 — 확인·수정하세요.)</p>
+        <div class="grid g2">
+          <div><label class="f"><span class="term" data-t="rpe">체감 강도</span> <span>(0~10 · 0=쉬움, 10=최대)</span></label><input type="number" id="rpe" min="0" max="10" step="0.5" value="7" /></div>
+          <div><label class="f">운동 시간 <span>(분)</span></label><input type="number" id="rpemin" min="0" step="1" value="40" /></div>
+        </div>
+        <div class="bignum" id="srpe-out" style="margin-top:14px">280 <small>AU</small></div>
+        <div class="explain"><span class="formula">체감 강도 × 시간(분)</span> = 부담 <span class="term" data-t="au">점수(AU)</span></div>
+        <div class="acwr-box">
+          <h4>이번 주 부담이 갑자기 늘었나? <span class="term" data-t="acwr">(주간 부하 비율)</span></h4>
+          <p>이번 주 부담 합계와 최근 4주 평균을 넣으면 갑자기 늘었는지 봐줍니다.</p>
+          <div class="grid g2">
+            <div><label class="f">이번 주 부담 합계</label><input type="number" id="srpe-acute" step="10" value="2200" /></div>
+            <div><label class="f">최근 4주 평균</label><input type="number" id="srpe-chronic" step="10" value="2000" /></div>
+          </div>
+          <div id="srpe-acwr"></div>
+        </div>
+        <div class="src">근거: Foster C, et al. (2001) · 주간 비율: Gabbett (2016)</div>
+      </div>
+    </section>
+
+    <section class="panel" id="trimp">
+      <div class="result" style="border:0;padding-top:14px">
+        <h3>② 심박 부하 <span class="term" data-t="trimp">(TRIMP)</span></h3>
+        <p class="sub"><span class="term" data-t="hrzone">심박 구간</span>별로 머문 시간(분)을 넣으세요. 요약 화면엔 평균만 있어 직접 입력합니다.</p>
+        <div class="grid g3">
+          <div><label class="f">아주 가벼움 <span>(1단계)</span></label><input type="number" id="z1" step="1" value="10" /></div>
+          <div><label class="f">가벼움 <span>(2단계)</span></label><input type="number" id="z2" step="1" value="50" /></div>
+          <div><label class="f">보통 <span>(3단계)</span></label><input type="number" id="z3" step="1" value="0" /></div>
+          <div><label class="f">힘듦 <span>(4단계)</span></label><input type="number" id="z4" step="1" value="0" /></div>
+          <div><label class="f">매우 힘듦 <span>(5단계)</span></label><input type="number" id="z5" step="1" value="0" /></div>
+        </div>
+        <div class="bignum" id="trimp-out" style="margin-top:14px">110 <small>TRIMP</small></div>
+        <div class="explain">높은 단계에 오래 있을수록 점수가 커집니다.</div>
+        <div class="acwr-box">
+          <h4>이번 주 부담이 갑자기 늘었나? <span class="term" data-t="acwr">(주간 부하 비율)</span></h4>
+          <div class="grid g2">
+            <div><label class="f">이번 주 합계</label><input type="number" id="trimp-acute" step="10" value="560" /></div>
+            <div><label class="f">최근 4주 평균</label><input type="number" id="trimp-chronic" step="10" value="500" /></div>
+          </div>
+          <div id="trimp-acwr"></div>
+        </div>
+        <div class="src">근거: Banister (1991) · Edwards (1993)</div>
+      </div>
+    </section>
+
+    <section class="panel" id="tss">
+      <div class="result" style="border:0;padding-top:14px">
+        <h3>③ 페이스 점수 <span class="term" data-t="tss">(TSS)</span></h3>
+        <p class="sub">내 <span class="term" data-t="threshold">역치 속도</span>를 기준으로 이번 운동이 얼마나 셌는지 점수로. 사진에서 자동 채움.</p>
+        <div class="grid g2">
+          <div><label class="f">운동 시간 <span>(분)</span></label><input type="number" id="tss-min" step="1" value="60" /></div>
+          <div><label class="f">평균 속도(페이스) <span>(분:초/km)</span></label><input type="text" id="tss-pace" value="5:30" /></div>
+        </div>
+        <div class="bignum" id="tss-out" style="margin-top:14px">53 <small>TSS</small></div>
+        <div class="sideval" id="tss-if">강도계수 = 0.73</div>
+        <div class="explain">100점이면 <span class="term" data-t="threshold">역치 속도</span>로 딱 1시간 달린 셈. <span class="term" data-t="if">강도계수(IF)</span>는 기준 대비 세기.</div>
+        <div class="acwr-box">
+          <h4>이번 주 부담이 갑자기 늘었나? <span class="term" data-t="acwr">(주간 부하 비율)</span></h4>
+          <div class="grid g2">
+            <div><label class="f">이번 주 합계</label><input type="number" id="tss-acute" step="10" value="440" /></div>
+            <div><label class="f">최근 4주 평균</label><input type="number" id="tss-chronic" step="10" value="400" /></div>
+          </div>
+          <div id="tss-acwr"></div>
+        </div>
+        <div class="src">근거: Coggan/TrainingPeaks (상업 지표) · Banister (1991)</div>
+      </div>
+    </section>
+
+    <section class="panel" id="power">
+      <div class="result" style="border:0;padding-top:14px">
+        <h3>④ 출력(파워)으로 <span class="term" data-t="overpace">오버페이스</span> 보기</h3>
+        <p class="sub"><span class="term" data-t="power">출력</span>으로 '너무 셌나'를 바로 판정. <span class="term" data-t="cp">버틸 수 있는 출력(CP)</span>·<span class="term" data-t="wprime">여분 에너지</span>는 위 기준값 사용.</p>
+        <div class="grid g2">
+          <div><label class="f">평균 <span class="term" data-t="power">출력</span> <span>(와트)</span></label><input type="number" id="ppw" step="1" value="340" /></div>
+          <div><label class="f"><span class="term" data-t="cp">버틸 수 있는 출력</span> <span>(CP·기준값과 동기화)</span></label><input type="number" id="cp2" step="1" value="300" /></div>
+        </div>
+        <div class="bignum" id="power-out" style="margin-top:14px">강도 1.13</div>
+        <div class="sideval" id="power-detail"></div>
+        <div class="explain">기준 미만이면 오래 지속 가능 · 넘으면 곧 지칩니다.</div>
+        <div class="src">근거: 임계파워 — Monod &amp; Scherrer (1965), Jones (2010)</div>
+      </div>
+    </section>
+
+    <section class="panel" id="poldist">
+      <div class="result" style="border:0;padding-top:14px">
+        <h3>⑤ 강도 분포 <span class="term" data-t="eighty">(80/20)</span></h3>
+        <p class="sub">한 주 운동 시간 중 편한 운동과 힘든 운동의 비율. 주간 값이라 직접 입력합니다.</p>
+        <div class="grid g2">
+          <div><label class="f">한 주 편한 운동 시간 <span>(분)</span></label><input type="number" id="easy" step="5" value="290" /></div>
+          <div><label class="f">한 주 힘든 운동 시간 <span>(분)</span></label><input type="number" id="hard" step="5" value="70" /></div>
+        </div>
+        <div class="bignum" id="pol-out" style="margin-top:14px">81% <small>편한 운동</small></div>
+        <div class="sideval" id="pol-detail"></div>
+        <div class="explain">힘든 운동 비중이 <b>20%</b>를 넘으면 다칠 위험이 커집니다.</div>
+        <div class="src">근거: Seiler (2010) · Stöggl &amp; Sperlich (2014)</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 7일 프로그램 -->
+  <div class="card" id="program" style="display:none">
+    <div class="step">이 기록으로 본 분석 & 7일 운동 계획</div>
+    <h2>오늘 운동의 부담</h2>
+    <div class="metrics" id="metrics"></div>
+    <div id="verdict-wrap"></div>
+    <h2 style="margin-top:22px">다음 7일 운동 계획</h2>
+    <p class="lede" id="plan-intro" style="margin-bottom:6px"></p>
+    <table class="plan" id="plan"><thead><tr><th>일차</th><th>운동</th><th>거리·강도 목표</th></tr></thead><tbody></tbody></table>
+    <h2 style="margin-top:22px">주의사항</h2>
+    <ul class="cautions" id="cautions"></ul>
+  </div>
+
+  <!-- 기준 요약 (전문가용) -->
+  <div class="card ref expert-only">
+    <h2>"너무 셌다(<span class="term" data-t="overpace">오버페이스</span>)" 판정 기준</h2>
+    <table class="thresh">
+      <tr><th>방법</th><th>위험 기준</th><th>뜻</th></tr>
+      <tr><td><span class="term" data-t="srpe">체감 강도</span></td><td><span class="term" data-t="acwr">주간 비율</span> &gt; 1.5</td><td>한 주 부담이 갑자기 늘어남</td></tr>
+      <tr><td><span class="term" data-t="trimp">심박 부하</span></td><td><span class="term" data-t="acwr">주간 비율</span> &gt; 1.5</td><td>심박 부담이 갑자기 늘어남</td></tr>
+      <tr><td><span class="term" data-t="tss">페이스 점수</span></td><td><span class="term" data-t="ctl">누적 체력</span> 주당 +5↑</td><td>피로가 계속 쌓임</td></tr>
+      <tr><td><span class="term" data-t="power">출력</span></td><td><span class="term" data-t="cp">버틸 출력</span> 초과 지속</td><td>그날 너무 빠르게 달림</td></tr>
+      <tr><td><span class="term" data-t="eighty">강도 분포</span></td><td>힘든 운동 &gt; 20%</td><td>힘든 운동이 너무 많음</td></tr>
+    </table>
+    <div class="note"><b>참고:</b> 주간 비율·누적 체력 기준은 코칭 경험칙이고(연구마다 차이 있음), <span class="term" data-t="cp">버틸 수 있는 출력(CP)</span>만 과학적으로 탄탄합니다. 이 도구는 <b>운동 부담을 살펴보는 보조 도구</b>이며 병원 진단·처방을 대신하지 않습니다. 사진에서 읽은 숫자는 가끔 틀릴 수 있으니 꼭 확인하세요. 통증이 있으면 운동을 멈추고 전문가와 상담하세요.</div>
+  </div>
+
+  <footer><b>PAFGYM</b> 러닝 강도·피로 계산기 · 2026 · 대한혈관학회 «Outdoor Running» 기반</footer>
+</div>
+
+<!-- 용어 설명 팝업 -->
+<div id="glossOverlay"></div>
+<div id="glossSheet" role="dialog" aria-modal="true">
+  <p class="gtitle"></p>
+  <p class="gdesc"></p>
+  <div class="ghow"></div>
+  <button id="glossClose">닫기</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $=function(id){return document.getElementById(id);};
+  function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v;}
+  function pace2min(str){str=(str||"").trim();if(str.indexOf(":")>-1){var p=str.split(":");return (parseFloat(p[0])||0)+(parseFloat(p[1])||0)/60;}var d=parseFloat(str);return isNaN(d)?0:d;}
+  function min2pace(m){if(!m||m<=0)return "-";var mm=Math.floor(m);var ss=Math.round((m-mm)*60);if(ss===60){mm++;ss=0;}return mm+":"+(ss<10?"0":"")+ss;}
+  function verdictHTML(level,text){var c=level===0?"v-ok":level===1?"v-warn":"v-bad";return '<div class="verdict '+c+'"><span class="dot"></span>'+text+'</div>';}
+  function verdict(el,level,text){el.innerHTML=verdictHTML(level,text);}
+  function acwrBlock(el,acute,chronic){
+    if(chronic<=0){el.innerHTML='<div class="sideval">최근 4주 평균을 입력하세요.</div>';return;}
+    var r=acute/chronic,lvl,msg;
+    if(r>1.5){lvl=2;msg="주간 비율 "+r.toFixed(2)+" — 위험 (갑자기 늘어남)";}
+    else if(r>=0.8&&r<=1.3){lvl=0;msg="주간 비율 "+r.toFixed(2)+" — 안전";}
+    else if(r>1.3){lvl=1;msg="주간 비율 "+r.toFixed(2)+" — 주의 (상한 근접)";}
+    else {lvl=1;msg="주간 비율 "+r.toFixed(2)+" — 낮음 (운동량 적음)";}
+    verdict(el,lvl,msg);
+  }
+
+  /* ---- 5지표 계산 ---- */
+  function calcSrpe(){$("srpe-out").innerHTML=Math.round(num("rpe")*num("rpemin"))+' <small>점</small>';acwrBlock($("srpe-acwr"),num("srpe-acute"),num("srpe-chronic"));}
+  function calcTrimp(){var t=num("z1")*1+num("z2")*2+num("z3")*3+num("z4")*4+num("z5")*5;$("trimp-out").innerHTML=Math.round(t)+' <small>점</small>';acwrBlock($("trimp-acwr"),num("trimp-acute"),num("trimp-chronic"));}
+  function calcTss(){var hrs=num("tss-min")/60,my=pace2min($("tss-pace").value),thr=pace2min($("thr").value);var IF=(my>0&&thr>0)?thr/my:0;$("tss-out").innerHTML=Math.round(hrs*IF*IF*100)+' <small>점</small>';$("tss-if").textContent="강도계수 = "+IF.toFixed(2);acwrBlock($("tss-acwr"),num("tss-acute"),num("tss-chronic"));}
+  function calcPower(){
+    $("cp2").value=$("cp").value; // CP 기준값 동기화
+    var P=num("ppw"),CP=num("cp2"),W=num("wprime")*1000;var IF=CP>0?P/CP:0;
+    $("power-out").innerHTML="강도 "+IF.toFixed(2);var det=$("power-detail");
+    if(CP<=0){det.innerHTML='<div class="sideval">버틸 수 있는 출력을 입력하세요.</div>';return;}
+    if(P>CP){var t=W/(P-CP),mm=Math.floor(t/60),ss=Math.round(t%60);det.innerHTML="지칠 때까지 약 <b>"+(t>=60?(mm+"분 "+ss+"초"):(Math.round(t)+"초"))+"</b>"+verdictHTML(2,"기준 초과 — 너무 셌음 (오래 못 버팀)");}
+    else if(P>CP*0.97){det.innerHTML="기준에 거의 닿음"+verdictHTML(1,"경계 강도");}
+    else {det.innerHTML="기준 미만 — 오래 지속 가능"+verdictHTML(0,"안전 (지속 가능)");}
+  }
+  function calcPol(){var e=num("easy"),h=num("hard"),tot=e+h;if(tot<=0){$("pol-out").innerHTML='—';$("pol-detail").innerHTML='';return;}
+    var ep=e/tot*100,hp=h/tot*100;$("pol-out").innerHTML=Math.round(ep)+'% <small>편한 운동</small>';
+    var lvl=hp<=20?0:hp<=25?1:2,msg=hp<=20?"힘든 운동 "+Math.round(hp)+"% — 적정 (80/20)":hp<=25?"힘든 운동 "+Math.round(hp)+"% — 약간 높음":"힘든 운동 "+Math.round(hp)+"% — 너무 많음 (과훈련 위험)";
+    $("pol-detail").innerHTML="총 "+Math.round(tot)+"분 (편 "+Math.round(ep)+"% · 힘듦 "+Math.round(hp)+"%)"+verdictHTML(lvl,msg);}
+  function recalcAll(){calcSrpe();calcTrimp();calcTss();calcPower();calcPol();}
+
+  /* ---- 사진 OCR (좌표 기반) ---- */
+  var drop=$("drop"),file=$("file");
+  drop.addEventListener("click",function(){file.click();});
+  ["dragover","dragenter"].forEach(function(e){drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.add("drag");});});
+  ["dragleave","drop"].forEach(function(e){drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.remove("drag");});});
+  drop.addEventListener("drop",function(ev){if(ev.dataTransfer.files[0])handleImg(ev.dataTransfer.files[0]);});
+  file.addEventListener("change",function(){if(file.files[0])handleImg(file.files[0]);});
+  function preprocess(img){
+    var scale=Math.min(3,Math.max(1,1600/img.width)),w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+    var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);
+    try{var d=ctx.getImageData(0,0,w,h),p=d.data,sum=0;for(var i=0;i<p.length;i+=4)sum+=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+      var inv=(sum/(p.length/4))<128;for(var j=0;j<p.length;j+=4){var g=0.299*p[j]+0.587*p[j+1]+0.114*p[j+2];if(inv)g=255-g;g=(g-128)*1.45+128;if(g<0)g=0;if(g>255)g=255;p[j]=p[j+1]=p[j+2]=g;}ctx.putImageData(d,0,0);}catch(e){}
+    return c;
+  }
+  function handleImg(f){
+    var url=URL.createObjectURL(f),pv=$("preview");pv.src=url;pv.style.display="block";
+    $("ocrbar").style.display="block";$("ocrfill").style.width="0%";$("ocrpct").textContent="준비…";
+    var img=new Image();
+    img.onload=function(){var canvas=preprocess(img);
+      Tesseract.recognize(canvas,"eng",{logger:function(m){if(m.status==="recognizing text"){var p=Math.round(m.progress*100);$("ocrfill").style.width=p+"%";$("ocrpct").textContent=p+"%";}}})
+      .then(function(res){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";parseData(res.data);}).catch(function(err){$("ocrbar").innerHTML='<span style="color:var(--bad)">사진 읽기 실패 — 값을 직접 입력하세요.</span>';});};
+    img.onerror=function(){$("ocrbar").innerHTML='<span style="color:var(--bad)">이미지를 불러올 수 없습니다.</span>';};
+    img.src=url;
+  }
+  function getWords(data){if(data&&data.words&&data.words.length)return data.words;var out=[];((data&&data.blocks)||[]).forEach(function(b){(b.paragraphs||[]).forEach(function(p){(p.lines||[]).forEach(function(l){(l.words||[]).forEach(function(w){out.push(w);});});});});return out;}
+  function parseData(data){
+    var ws=getWords(data).filter(function(w){return w&&w.text&&w.text.trim()&&w.bbox;});
+    if(!ws.length){parseLinear((data&&data.text)||"");return;}
+    var toks=ws.map(function(w){var b=w.bbox;return {t:w.text.trim(),cx:(b.x0+b.x1)/2,cy:(b.y0+b.y1)/2,x0:b.x0,x1:b.x1};});
+    function findLabel(re){for(var i=0;i<toks.length;i++)if(re.test(toks[i].t))return toks[i];return null;}
+    function sameCol(a,l){return !(a.x1<l.x0-14||a.x0>l.x1+14)||Math.abs(a.cx-l.cx)<75;}
+    function valueAbove(label,fn){if(!label)return null;var c=toks.filter(function(a){return a!==label&&a.cy<label.cy&&sameCol(a,label);}).sort(function(x,y){return (label.cy-x.cy)-(label.cy-y.cy);});for(var i=0;i<c.length;i++){var v=fn(c[i].t);if(v!=null)return v;}return null;}
+    function pNum(s){var m=s.replace(",",".").match(/\d+(?:\.\d+)?/);return m?parseFloat(m[0]):null;}
+    function pDec(s){var m=s.replace(",",".").match(/\d+\.\d+/);return m?parseFloat(m[0]):null;}
+    function pPace(s){var m=s.match(/(\d{1,2})\s*['’‘′:]\s*(\d{2})/);return m?(+m[1]+(+m[2])/60):null;}
+    function pTime(s){var m=s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(!m)return null;var t=!!m[3];return (t?+m[1]:0)*60+(t?+m[2]:+m[1])+(t?+m[3]:+m[2])/60;}
+    function rng(a,b){return function(s){var v=pNum(s);return (v!=null&&v>=a&&v<=b)?v:null;};}
+    var dl=findLabel(/킬로미터|거리|^km$/i),dist=valueAbove(dl,pDec);if(dist==null)dist=valueAbove(dl,rng(0.3,120));
+    if(dist==null){var dm=toks.map(function(t){return t.t;}).join(" ").toLowerCase().match(/(\d{1,3}[.,]\d{1,2})\s*km/);if(dm)dist=parseFloat(dm[1].replace(",","."));}
+    if(dist!=null)$("dist").value=dist;
+    var tl=findLabel(/시간|time/i),durMin=null;if(tl){var c=toks.filter(function(a){return a!==tl&&a.cy<tl.cy&&sameCol(a,tl);}).sort(function(x,y){return (tl.cy-x.cy)-(tl.cy-y.cy);});for(var i=0;i<c.length;i++){var v=pTime(c[i].t);if(v!=null){durMin=v;break;}}}
+    if(durMin!=null)$("dur").value=Math.round(durMin);
+    var pl=findLabel(/페이스|pace/i),paceMin=valueAbove(pl,pPace);
+    if(paceMin)$("pace").value=Math.floor(paceMin)+":"+(Math.round((paceMin-Math.floor(paceMin))*60)<10?"0":"")+Math.round((paceMin-Math.floor(paceMin))*60);
+    else if(dist>0&&durMin>0)$("pace").value=min2pace(durMin/dist);
+    var hr=valueAbove(findLabel(/심박|bpm|heart|♡|♥/i),rng(80,215));
+    if(hr!=null)$("hr").value=Math.round(hr);
+    var cad=valueAbove(findLabel(/케이던스|cadence|spm/i),rng(120,240));if(cad!=null)$("cad").value=Math.round(cad);
+    var pwr=valueAbove(findLabel(/파워|power|watt|와트/i),rng(80,600));if(pwr!=null)$("pw").value=Math.round(pwr);
+    $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 다 읽었어요 — 값 확인 후 아래 버튼을 누르세요</span>';
+  }
+  function parseLinear(text){
+    var t=text.replace(/[ \t]+/g," ");
+    function around(re,b,a){var m=re.exec(t);if(!m)return null;var i=m.index,s=Math.max(0,i-(b||45)),e=Math.min(t.length,i+m[0].length+(a||45));return {win:t.slice(s,e),rel:i-s};}
+    function near(re,min,max,dp,ws){var w=around(re,ws,ws);if(!w)return null;var r=/(\d{1,4}(?:[.,]\d{1,2})?)/g,x,L=[];while((x=r.exec(w.win))!==null){var v=parseFloat(x[1].replace(",","."));if(v>=min&&v<=max)L.push({v:v,d:Math.abs(x.index-w.rel),dec:/[.,]/.test(x[1])});}if(!L.length)return null;if(dp){var D=L.filter(function(n){return n.dec;});if(D.length){D.sort(function(a,b){return a.d-b.d;});return D[0].v;}}L.sort(function(a,b){return a.d-b.d;});return L[0].v;}
+    var d=near(/거리|킬로미터|km/i,0.3,120,true);if(d!=null)$("dist").value=d;
+    var tw=around(/시간|time/i,30,30);if(tw){var tm=tw.win.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(tm){var th=!!tm[3];$("dur").value=Math.round((th?+tm[1]:0)*60+(th?+tm[2]:+tm[1])+(th?+tm[3]:+tm[2])/60);}}
+    var hr=near(/심박|bpm/i,80,215);if(hr!=null)$("hr").value=Math.round(hr);
+  }
+
+  /* ---- 사진값 → 계산기 채우기 + 프로그램 ---- */
+  $("apply").addEventListener("click",function(){
+    var dist=num("dist"),dur=num("dur"),pace=pace2min($("pace").value),hr=num("hr"),pw=num("pw");
+    var thr=pace2min($("thr").value),maxhr=num("maxhr"),cp=num("cp");
+    if(!pace&&dist>0&&dur>0){pace=dur/dist;$("pace").value=min2pace(pace);}
+    if(!dist&&pace>0&&dur>0)dist=dur/pace;
+    if(dur>0){$("tss-min").value=Math.round(dur);$("rpemin").value=Math.round(dur);}
+    if(pace>0)$("tss-pace").value=min2pace(pace);
+    if(pw>0)$("ppw").value=Math.round(pw);
+    var pHR=(hr>0&&maxhr>0)?hr/maxhr*100:0;
+    if(pHR>0)$("rpe").value=Math.max(1,Math.min(10,Math.round((pHR-45)/5)));
+    [$("tss-min"),$("tss-pace"),$("ppw"),$("rpe"),$("rpemin")].forEach(function(e){e.classList.add("filled");});
+    recalcAll();
+    buildProgram(dist,dur,pace,hr,pw,thr,maxhr,cp);
+    $("program").style.display="block";
+    $("program").scrollIntoView({behavior:"smooth",block:"start"});
+  });
+
+  function buildProgram(dist,dur,avgPace,hr,pw,thr,maxhr,cp){
+    var IFpace=(avgPace>0&&thr>0)?thr/avgPace:0;
+    var tss=(dur>0&&IFpace>0)?(dur/60)*IFpace*IFpace*100:0;
+    var pHR=(hr>0&&maxhr>0)?hr/maxhr*100:0;
+    var IFpw=(pw>0&&cp>0)?pw/cp:0;
+    var zone=pHR>0?(pHR<70?0:pHR<80?1:pHR<90?2:3):(IFpace>0?(IFpace<0.80?0:IFpace<0.91?1:IFpace<1.02?2:3):1);
+    var zoneName=["가벼움","보통","힘듦","매우 힘듦"][zone];
+    var rpeEst=pHR>0?Math.max(1,Math.min(10,Math.round((pHR-45)/5))):[3,5,7,9][zone];
+    var srpe=dur>0?rpeEst*dur:0;
+    var cards=[];
+    if(dist>0)cards.push(["거리",dist.toFixed(1)+' <small>km</small>']);
+    if(avgPace>0)cards.push(["평균 속도",min2pace(avgPace)+' <small>/km</small>']);
+    if(tss>0)cards.push(["페이스 점수",Math.round(tss)]);
+    if(IFpace>0)cards.push(["강도계수",IFpace.toFixed(2)]);
+    if(pHR>0)cards.push(["평균 심박",Math.round(pHR)+'% <small>최대대비</small>']);
+    if(IFpw>0)cards.push(["출력 강도",IFpw.toFixed(2)]);
+    if(srpe>0)cards.push(["체감 부담",Math.round(srpe)+' <small>점</small>']);
+    $("metrics").innerHTML=cards.map(function(c){return '<div class="metric"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>';}).join("");
+    var vlvl,vtxt,over=IFpw>1.0;
+    if(zone>=3||over){vlvl=2;vtxt="강한 운동 — 충분히 쉬어야 합니다"+(over?" (버틸 출력 초과)":"");}
+    else if(zone===2){vlvl=1;vtxt="힘든 운동 — 다음 1~2일은 가볍게";}
+    else if(zone===1){vlvl=1;vtxt="보통 운동 — 회복·균형 유지";}
+    else {vlvl=0;vtxt="가벼운 운동 — 잘 분배된 훈련";}
+    $("verdict-wrap").innerHTML=verdictHTML(vlvl,"오늘은 '"+zoneName+"' · "+vtxt);
+    buildPlan(dist,avgPace,thr,zone);
+  }
+  function buildPlan(dist,avgPace,thr,zone){
+    if(!dist||dist<=0)dist=8; if(!thr||thr<=0)thr=5;
+    var ap=avgPace>0?avgPace:0;
+    var easyP=Math.max(thr+1.25,ap+0.17),longP=Math.max(thr+1.5,ap+0.08),tempoP=thr+0.12,intP=thr-0.25;
+    function pr(p){return min2pace(p)+"/km";}
+    var longD=Math.round(Math.min(dist*1.1,dist+dist*0.1)*10)/10;if(longD<dist)longD=dist;
+    var easyD=Math.max(3,Math.round(dist*0.6*10)/10),midD=Math.max(4,Math.round(dist*0.8*10)/10);
+    var rows;
+    if(zone>=2){rows=[
+      ["1일차 (오늘)","마친 운동","휴식·수분·단백질 보충","rest"],
+      ["2일차","가벼운 조깅","<b>"+easyD+"km</b> · "+pr(easyP)+" (대화 가능 속도)","easy"],
+      ["3일차","휴식 / 가벼운 다른 운동","수영·자전거 30~40분 또는 휴식","rest"],
+      ["4일차","가벼운 러닝","<b>"+midD+"km</b> · "+pr(easyP),"easy"],
+      ["5일차","조금 빠르게 (속도 운동)","웜업 후 <b>"+Math.max(3,Math.round(dist*0.5))+"km</b> · "+pr(tempoP),"mod"],
+      ["6일차","가벼운 러닝","<b>"+easyD+"km</b> · "+pr(easyP),"easy"],
+      ["7일차","길게 달리기","<b>"+longD+"km</b> · "+pr(longP)+" (이번 주 최장, 지난주보다 10% 이내)","easy"]];}
+    else {rows=[
+      ["1일차 (오늘)","마친 운동","가벼운 정리운동","rest"],
+      ["2일차","가벼운 러닝","<b>"+midD+"km</b> · "+pr(easyP),"easy"],
+      ["3일차","빠르게-천천히 반복 (속도 운동)","웜업 후 (400m 빠르게 "+pr(intP)+" + 200m 조깅) ×5~6","hard"],
+      ["4일차","가벼운 조깅","<b>"+easyD+"km</b> · "+pr(easyP),"easy"],
+      ["5일차","휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"],
+      ["6일차","가벼운 러닝","<b>"+midD+"km</b> · "+pr(easyP),"easy"],
+      ["7일차","길게 달리기","<b>"+longD+"km</b> · "+pr(longP)+" (이번 주 최장, 지난주보다 10% 이내)","easy"]];}
+    $("plan-intro").textContent="대부분 편하게(80) · 힘든 운동은 조금만(20) · 한 주 거리 늘림 10% 이내 · 3주 늘리고 1주 쉬기.";
+    var tn={easy:"가벼움",hard:"힘듦",mod:"보통",rest:"휴식"};
+    $("plan").querySelector("tbody").innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+' <span class="tag t-'+r[3]+'">'+tn[r[3]]+'</span></td><td>'+r[2]+'</td></tr>';}).join("");
+    $("cautions").innerHTML=[
+      "<b>하루에 너무 무리하지 않기:</b> 한 번의 러닝이 최근 한 달 최장 거리의 <b>110%</b>를 넘지 않게 (Nielsen 2025).",
+      "<b>대부분 편하게:</b> 한 주 운동의 약 80%는 대화 가능한 느린 속도로.",
+      "<b>3주 늘리고 1주 쉬기:</b> 힘줄·뼈가 따라올 시간을 줍니다.",
+      "한 주 거리 늘림은 <b>10% 이내</b>. 통증이 2~3일 가면 거리를 줄이고 점검 (힘줄 적응은 최소 12주)."
+    ].map(function(x){return "<li>"+x+"</li>";}).join("");
+  }
+
+  /* tabs */
+  var tabs=document.querySelectorAll(".tab");
+  tabs.forEach(function(t){t.addEventListener("click",function(){tabs.forEach(function(x){x.setAttribute("aria-selected","false");});t.setAttribute("aria-selected","true");document.querySelectorAll(".panel").forEach(function(p){p.classList.remove("active");});$(t.dataset.tab).classList.add("active");});});
+  document.querySelectorAll("input").forEach(function(i){i.addEventListener("input",recalcAll);});
+  recalcAll();
+})();
+
+/* ===== 용어 설명 팝업 ===== */
+(function(){
+  var G={
+    load:["부하 (몸이 받는 부담)","운동이 몸에 준 부담의 총량이에요. 얼마나 멀리·오래·세게 했는지를 합친 개념입니다."],
+    overpace:["오버페이스","몸이 감당할 수 있는 것보다 너무 세게, 또는 너무 갑자기 달린 상태예요. 부상·과훈련의 가장 큰 원인입니다."],
+    rpe:["체감 강도 (RPE)","운동이 얼마나 힘들었는지 0~10으로 매긴 점수예요. 0은 쉬는 느낌, 10은 '죽을 만큼 힘듦'. 운동 끝나고 30분쯤 뒤에 매기면 정확합니다."],
+    srpe:["체감 강도 부하 (sRPE)","체감 강도(0~10) × 운동 시간(분)이에요. 시계·장비 없이 그날 부담을 숫자로 만든 가장 쉬운 방법입니다."],
+    au:["점 (AU)","부담 점수의 단위예요. 절대값보다 '주마다 얼마나 변했는지' 비교가 더 중요합니다."],
+    trimp:["심박 부하 (TRIMP)","심박수가 높은 구간에 오래 있을수록 커지는 부담 점수예요. 심박을 강도별로 나눠 가중치를 두고 더합니다."],
+    hrzone:["심박 구간","심박수 범위를 강도별로 1~5단계로 나눈 것이에요. 높은 단계일수록 더 힘든 강도입니다."],
+    tss:["페이스 점수 (TSS)","내 '역치 속도'를 기준으로 이번 운동이 얼마나 셌는지 점수로 나타낸 값이에요. 100점이면 역치 강도로 딱 1시간 달린 셈입니다."],
+    threshold:["역치 속도(페이스)","약 1시간 동안 최대한 유지할 수 있는 빠르기예요. 사람마다 다르며, 내 강도를 재는 '기준선'이 됩니다.","최근 <b>10km 기록 페이스</b>를 그대로 넣으면 비슷해요. 모르면 '<b>약 1시간 죽지 않고 유지 가능한 페이스</b>', 또는 5km 전력 페이스보다 km당 10~20초 느리게. <br>예) 10km를 50분에 → <b>5:00</b> 입력 (분:초/km)."],
+    if:["강도계수 (IF)","이번 운동이 내 기준(역치) 대비 몇 배 세기였는지예요. 1.0이면 딱 역치 강도, 1.0보다 크면 그보다 셉니다."],
+    power:["출력 (파워·와트)","달릴 때 내는 힘이에요. 속도와 달리 오르막·맞바람까지 반영돼 강도를 더 정확히 봅니다. 단위는 와트(W).","러닝 <b>파워 센서</b>(Stryd 풋팟, 일부 가민·코로스 시계)가 있으면 <b>사진에서 자동</b>으로 읽혀요. 센서가 없으면 이 값은 <b>비워 두세요</b> (출력 계산만 건너뜁니다)."],
+    cp:["버틸 수 있는 출력 (임계파워·CP)","오래 버틸 수 있는 최대 출력의 경계선이에요. 이 선을 넘겨 달리면 곧 지쳐서 속도를 유지할 수 없습니다.","러닝 파워 센서 앱(Stryd 등)에 '<b>CP</b>' 또는 '<b>Critical Power</b>' 값이 있어요 — 그 숫자를 그대로 넣으세요. 20분 전력 달리기 평균 출력의 <b>약 90%</b>도 대략값입니다. <br>센서가 없으면 비워 두세요. (참고: 취미 러너 200~280W · 숙련 280~350W)"],
+    wprime:["여분 에너지 (W′·더블유 프라임)","버틸 수 있는 출력을 넘었을 때 추가로 쓸 수 있는 '비상 연료' 총량이에요. 다 쓰면 멈춰야 합니다.","W′는 <b>대부분의 러닝 앱·시계에는 표시되지 않습니다.</b><br>• <b>Stryd</b> 파워미터 사용 시: Stryd 앱 또는 PowerCenter의 프로필/파워 정보에서 '<b>W′</b>' 또는 '<b>W prime</b>' 값을 찾아 넣으세요.<br>• 가민·애플워치·나이키 등 일반 앱: 이 값이 없습니다 → <b>기본값 15를 그대로 두세요.</b> 오버페이스 판정에 거의 영향이 없습니다.<br>(단위 kJ · 보통 10~25 사이)"],
+    eighty:["강도 분포 (80/20)","한 주 운동 시간의 약 80%는 편하게(대화 가능), 20%만 힘들게 하라는 권장 분배예요. 힘든 운동이 너무 많으면 탈이 납니다."],
+    acwr:["주간 부하 비율 (ACWR)","이번 주 부담 ÷ 최근 4주 평균이에요. 부담이 갑자기 늘었는지 보는 값으로, 1.5를 넘으면 부상 위험이 커집니다."],
+    ctl:["누적 체력 (CTL)","최근 몇 주간 쌓인 체력 수준(만성 부하)이에요. 천천히 올려야 안전합니다."],
+    bpm:["bpm (분당 심박수)","심장이 1분에 뛰는 횟수예요. 높을수록 더 힘든 강도입니다."],
+    spm:["걸음수 (케이던스·spm)","1분에 내딛는 발걸음 수예요. 보통 분당 170~180을 권장하며, 걸음수를 살짝 늘리면 무릎·정강이 충격이 줄어듭니다."],
+    maxhr:["최대 심박수","심장이 낼 수 있는 가장 빠른 박동수예요. 강도를 가늠하는 기준이 됩니다.","평소 운동 중 시계에 찍힌 <b>최고 심박</b>을 넣으세요. 측정 기록이 없으면 '<b>220 − 나이</b>'로 어림. <br>예) 40세 → 약 <b>180</b>."]
+  };
+  var overlay=document.getElementById('glossOverlay'),sheet=document.getElementById('glossSheet');
+  function open(k){var g=G[k];if(!g)return;sheet.querySelector('.gtitle').textContent=g[0];sheet.querySelector('.gdesc').textContent=g[1];
+    var how=sheet.querySelector('.ghow');if(g[2]){how.innerHTML='<b>📥 이렇게 입력하세요</b><br>'+g[2];how.style.display='block';}else{how.style.display='none';}
+    overlay.style.display='block';sheet.style.display='block';}
+  function close(){overlay.style.display='none';sheet.style.display='none';}
+  document.body.addEventListener('click',function(e){var t=e.target.closest('.term');if(t){e.preventDefault();e.stopPropagation();open(t.getAttribute('data-t'));}});
+  overlay.addEventListener('click',close);
+  document.getElementById('glossClose').addEventListener('click',close);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+})();
+
+/* ===== 모드 토글 (일반인 / 전문가) ===== */
+(function(){
+  var easy=document.getElementById('mode-easy'),pro=document.getElementById('mode-pro');
+  function set(expert){document.body.classList.toggle('mode-expert',expert);easy.setAttribute('aria-pressed',String(!expert));pro.setAttribute('aria-pressed',String(expert));}
+  easy.addEventListener('click',function(){set(false);});
+  pro.addEventListener('click',function(){set(true);});
+  set(false); // 기본: 일반인 버전
+})();
+</script>
+</body>
+</html>
