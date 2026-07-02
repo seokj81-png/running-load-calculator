@@ -144,7 +144,7 @@
     <div class="sectlabel">읽어온 값 (확인하고 틀리면 고치기)</div>
     <div class="grid g3">
       <div><label class="f">거리 <span>(km)</span></label><input type="number" id="dist" step="0.1" placeholder="10.2" /></div>
-      <div><label class="f">시간 <span>(분)</span></label><input type="number" id="dur" step="1" placeholder="56" /></div>
+      <div><label class="f">시간 <span>(분:초)</span></label><input type="text" id="dur" inputmode="numeric" placeholder="13:13" /></div>
       <div><label class="f">평균 속도(페이스) <span>(분:초/km)</span></label><input type="text" id="pace" placeholder="5:30" /></div>
       <div><label class="f">평균 심박 <span class="term" data-t="bpm">bpm</span></label><input type="number" id="hr" step="1" placeholder="152" /></div>
       <div><label class="f">평균 <span class="term" data-t="power">출력(파워)</span> <span>(와트)</span></label><input type="number" id="pw" step="1" placeholder="245" /></div>
@@ -327,6 +327,9 @@
   function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v;}
   function pace2min(str){str=(str||"").trim();if(str.indexOf(":")>-1){var p=str.split(":");return (parseFloat(p[0])||0)+(parseFloat(p[1])||0)/60;}var d=parseFloat(str);return isNaN(d)?0:d;}
   function min2pace(m){if(!m||m<=0)return "-";var mm=Math.floor(m);var ss=Math.round((m-mm)*60);if(ss===60){mm++;ss=0;}return mm+":"+(ss<10?"0":"")+ss;}
+  // 시간 입력: "13:13"→13.216분, "1:02:30"→62.5분, "56"→56분
+  function dur2min(str){str=(str||"").trim();if(!str)return 0;var p=str.split(":");if(p.length===3)return (+p[0]||0)*60+(+p[1]||0)+(+p[2]||0)/60;if(p.length===2)return (+p[0]||0)+(+p[1]||0)/60;var d=parseFloat(str);return isNaN(d)?0:d;}
+  function min2dur(m){if(!m||m<=0)return "";var tot=Math.round(m*60);var h=Math.floor(tot/3600),mm=Math.floor(tot%3600/60),ss=tot%60;function z(n){return (n<10?"0":"")+n;}return h>0?h+":"+z(mm)+":"+z(ss):mm+":"+z(ss);}
   function verdictHTML(level,text){var c=level===0?"v-ok":level===1?"v-warn":"v-bad";return '<div class="verdict '+c+'"><span class="dot"></span>'+text+'</div>';}
   function verdict(el,level,text){el.innerHTML=verdictHTML(level,text);}
   function acwrBlock(el,acute,chronic){
@@ -393,7 +396,7 @@
   }
   function fillFromAI(o){
     if(o.distance_km!=null)$("dist").value=o.distance_km;
-    if(o.duration_min!=null)$("dur").value=Math.round(o.duration_min);
+    if(o.duration_min!=null)$("dur").value=min2dur(o.duration_min);
     if(o.avg_pace){var m=String(o.avg_pace).replace(/[’'′]/g,":").match(/(\d{1,2}):(\d{2})/);if(m)$("pace").value=m[1]+":"+m[2];}
     if(o.avg_hr_bpm!=null)$("hr").value=Math.round(o.avg_hr_bpm);
     if(o.avg_power_w!=null)$("pw").value=Math.round(o.avg_power_w);
@@ -427,7 +430,7 @@
     if(dist==null){var dm=toks.map(function(t){return t.t;}).join(" ").toLowerCase().match(/(\d{1,3}[.,]\d{1,2})\s*km/);if(dm)dist=parseFloat(dm[1].replace(",","."));}
     if(dist!=null)$("dist").value=dist;
     var tl=findLabel(/시간|time/i),durMin=null;if(tl){var c=toks.filter(function(a){return a!==tl&&a.cy<tl.cy&&sameCol(a,tl);}).sort(function(x,y){return (tl.cy-x.cy)-(tl.cy-y.cy);});for(var i=0;i<c.length;i++){var v=pTime(c[i].t);if(v!=null){durMin=v;break;}}}
-    if(durMin!=null)$("dur").value=Math.round(durMin);
+    if(durMin!=null)$("dur").value=min2dur(durMin);
     var pl=findLabel(/페이스|pace/i),paceMin=valueAbove(pl,pPace);
     if(paceMin)$("pace").value=Math.floor(paceMin)+":"+(Math.round((paceMin-Math.floor(paceMin))*60)<10?"0":"")+Math.round((paceMin-Math.floor(paceMin))*60);
     else if(dist>0&&durMin>0)$("pace").value=min2pace(durMin/dist);
@@ -442,13 +445,13 @@
     function around(re,b,a){var m=re.exec(t);if(!m)return null;var i=m.index,s=Math.max(0,i-(b||45)),e=Math.min(t.length,i+m[0].length+(a||45));return {win:t.slice(s,e),rel:i-s};}
     function near(re,min,max,dp,ws){var w=around(re,ws,ws);if(!w)return null;var r=/(\d{1,4}(?:[.,]\d{1,2})?)/g,x,L=[];while((x=r.exec(w.win))!==null){var v=parseFloat(x[1].replace(",","."));if(v>=min&&v<=max)L.push({v:v,d:Math.abs(x.index-w.rel),dec:/[.,]/.test(x[1])});}if(!L.length)return null;if(dp){var D=L.filter(function(n){return n.dec;});if(D.length){D.sort(function(a,b){return a.d-b.d;});return D[0].v;}}L.sort(function(a,b){return a.d-b.d;});return L[0].v;}
     var d=near(/거리|킬로미터|km/i,0.3,120,true);if(d!=null)$("dist").value=d;
-    var tw=around(/시간|time/i,30,30);if(tw){var tm=tw.win.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(tm){var th=!!tm[3];$("dur").value=Math.round((th?+tm[1]:0)*60+(th?+tm[2]:+tm[1])+(th?+tm[3]:+tm[2])/60);}}
+    var tw=around(/시간|time/i,30,30);if(tw){var tm=tw.win.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(tm){var th=!!tm[3];$("dur").value=min2dur((th?+tm[1]:0)*60+(th?+tm[2]:+tm[1])+(th?+tm[3]:+tm[2])/60);}}
     var hr=near(/심박|bpm/i,80,215);if(hr!=null)$("hr").value=Math.round(hr);
   }
 
   /* ---- 사진값 → 계산기 채우기 + 프로그램 ---- */
   $("apply").addEventListener("click",function(){
-    var dist=num("dist"),dur=num("dur"),pace=pace2min($("pace").value),hr=num("hr"),pw=num("pw");
+    var dist=num("dist"),dur=dur2min($("dur").value),pace=pace2min($("pace").value),hr=num("hr"),pw=num("pw");
     var thr=pace2min($("thr").value),maxhr=num("maxhr"),cp=num("cp");
     if(!pace&&dist>0&&dur>0){pace=dur/dist;$("pace").value=min2pace(pace);}
     if(!dist&&pace>0&&dur>0)dist=dur/pace;
