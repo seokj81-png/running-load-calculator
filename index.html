@@ -321,6 +321,8 @@
 <script>
 (function(){
   "use strict";
+  // 사진 인식 서버(클로드 Haiku 4.5 비전) 주소. 배포 후 Worker 주소를 넣으면 클로드로 인식, 비우면 브라우저 OCR로 대체.
+  var OCR_API="https://running-photo-ocr.pafgym.workers.dev";
   var $=function(id){return document.getElementById(id);};
   function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v;}
   function pace2min(str){str=(str||"").trim();if(str.indexOf(":")>-1){var p=str.split(":");return (parseFloat(p[0])||0)+(parseFloat(p[1])||0)/60;}var d=parseFloat(str);return isNaN(d)?0:d;}
@@ -372,11 +374,39 @@
   }
   function handleImg(f){
     var url=URL.createObjectURL(f),pv=$("preview");pv.src=url;pv.style.display="block";
-    $("ocrbar").style.display="block";$("ocrfill").style.width="0%";$("ocrpct").textContent="준비…";
+    $("ocrbar").style.display="block";$("ocrfill").style.width="0%";$("ocrpct").textContent="읽는 중…";
+    if(OCR_API){ readViaAPI(f,url); } else { runTesseract(url); }
+  }
+  // 클로드 비전 서버로 인식 (실패 시 브라우저 OCR로 대체)
+  function readViaAPI(f,url){
+    $("ocrfill").style.width="50%";
+    var reader=new FileReader();
+    reader.onload=function(){
+      var b64=(String(reader.result).split(",")[1])||"";
+      fetch(OCR_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:b64,mime:f.type||"image/jpeg"})})
+      .then(function(r){return r.json();})
+      .then(function(o){ if(o&&!o.error){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";fillFromAI(o);} else {runTesseract(url);} })
+      .catch(function(){runTesseract(url);});
+    };
+    reader.onerror=function(){runTesseract(url);};
+    reader.readAsDataURL(f);
+  }
+  function fillFromAI(o){
+    if(o.distance_km!=null)$("dist").value=o.distance_km;
+    if(o.duration_min!=null)$("dur").value=Math.round(o.duration_min);
+    if(o.avg_pace){var m=String(o.avg_pace).replace(/[’'′]/g,":").match(/(\d{1,2}):(\d{2})/);if(m)$("pace").value=m[1]+":"+m[2];}
+    if(o.avg_hr_bpm!=null)$("hr").value=Math.round(o.avg_hr_bpm);
+    if(o.avg_power_w!=null)$("pw").value=Math.round(o.avg_power_w);
+    if(o.cadence_spm!=null)$("cad").value=Math.round(o.cadence_spm);
+    $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 사진에서 읽었어요 — 값 확인 후 아래 버튼을 누르세요</span>';
+  }
+  // 브라우저 내 OCR (서버 없을 때/실패 시 대체)
+  function runTesseract(url){
+    $("ocrpct").textContent="0%";
     var img=new Image();
     img.onload=function(){var canvas=preprocess(img);
       Tesseract.recognize(canvas,"eng",{logger:function(m){if(m.status==="recognizing text"){var p=Math.round(m.progress*100);$("ocrfill").style.width=p+"%";$("ocrpct").textContent=p+"%";}}})
-      .then(function(res){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";parseData(res.data);}).catch(function(err){$("ocrbar").innerHTML='<span style="color:var(--bad)">사진 읽기 실패 — 값을 직접 입력하세요.</span>';});};
+      .then(function(res){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";parseData(res.data);}).catch(function(){$("ocrbar").innerHTML='<span style="color:var(--bad)">사진 읽기 실패 — 값을 직접 입력하세요.</span>';});};
     img.onerror=function(){$("ocrbar").innerHTML='<span style="color:var(--bad)">이미지를 불러올 수 없습니다.</span>';};
     img.src=url;
   }
