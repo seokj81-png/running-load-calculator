@@ -33,6 +33,9 @@
   .modebtn{flex:1; border:none; background:transparent; color:var(--muted); font-weight:800; font-size:14.5px; padding:11px 8px; border-radius:9px; cursor:pointer; transition:.12s}
   .modebtn[aria-pressed="true"]{background:#fff; color:var(--ink); box-shadow:var(--shadow)}
   .modebtn small{display:block; font-weight:600; font-size:11px; color:var(--muted); margin-top:2px}
+  .goalchips{display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 14px}
+  .goalchip{border:1.5px solid var(--line); background:var(--card); color:var(--muted); font-weight:800; font-size:13.5px; padding:9px 15px; border-radius:999px; cursor:pointer; transition:.12s}
+  .goalchip[aria-pressed="true"]{background:var(--ink); color:#fff; border-color:var(--ink)}
   .expert-only{display:none}
   body.mode-expert .expert-only{display:block}
 
@@ -149,6 +152,15 @@
       <div><label class="f">평균 심박 <span class="term" data-t="bpm">bpm</span></label><input type="number" id="hr" step="1" placeholder="152" /></div>
       <div><label class="f">평균 <span class="term" data-t="power">출력(파워)</span> <span>(와트)</span></label><input type="number" id="pw" step="1" placeholder="245" /></div>
       <div><label class="f"><span class="term" data-t="spm">걸음수(케이던스)</span></label><input type="number" id="cad" step="1" placeholder="176" /></div>
+    </div>
+    <div class="sectlabel">운동 목적 — 프로그램은 항상 "부상예방 + 선택한 목적"으로 만들어져요</div>
+    <div class="goalchips" id="goalsel">
+      <button class="goalchip" data-goal="base" aria-pressed="true">부상예방만</button>
+      <button class="goalchip" data-goal="5k" aria-pressed="false">5km</button>
+      <button class="goalchip" data-goal="10k" aria-pressed="false">10km</button>
+      <button class="goalchip" data-goal="half" aria-pressed="false">하프</button>
+      <button class="goalchip" data-goal="full" aria-pressed="false">풀코스</button>
+      <button class="goalchip" data-goal="hyrox" aria-pressed="false">하이록스</button>
     </div>
     <button class="go" id="apply">이 값으로 계산하고 운동 계획 만들기 →</button>
   </div>
@@ -324,6 +336,7 @@
   // 사진 인식 서버(클로드 Haiku 4.5 비전) 주소. 배포 후 Worker 주소를 넣으면 클로드로 인식, 비우면 브라우저 OCR로 대체.
   var OCR_API="https://running-photo-ocr.pafgym.workers.dev";
   var $=function(id){return document.getElementById(id);};
+  var goal="base",lastPlanArgs=null; // 운동 목적 + 마지막 프로그램 인자(목적 변경 시 재생성용)
   function num(id){var v=parseFloat($(id).value);return isNaN(v)?0:v;}
   function pace2min(str){str=(str||"").trim();if(str.indexOf(":")>-1){var p=str.split(":");return (parseFloat(p[0])||0)+(parseFloat(p[1])||0)/60;}var d=parseFloat(str);return isNaN(d)?0:d;}
   function min2pace(m){if(!m||m<=0)return "-";var mm=Math.floor(m);var ss=Math.round((m-mm)*60);if(ss===60){mm++;ss=0;}return mm+":"+(ss<10?"0":"")+ss;}
@@ -449,6 +462,14 @@
     var hr=near(/심박|bpm/i,80,215);if(hr!=null)$("hr").value=Math.round(hr);
   }
 
+  /* ---- 운동 목적 선택 ---- */
+  $("goalsel").addEventListener("click",function(e){
+    var b=e.target.closest(".goalchip");if(!b)return;
+    goal=b.getAttribute("data-goal");
+    Array.prototype.forEach.call($("goalsel").querySelectorAll(".goalchip"),function(c){c.setAttribute("aria-pressed",c===b?"true":"false");});
+    if(lastPlanArgs)buildPlan.apply(null,lastPlanArgs); // 이미 만든 프로그램이 있으면 즉시 갱신
+  });
+
   /* ---- 사진값 → 계산기 채우기 + 프로그램 ---- */
   $("apply").addEventListener("click",function(){
     var dist=num("dist"),dur=dur2min($("dur").value),pace=pace2min($("pace").value),hr=num("hr"),pw=num("pw");
@@ -491,41 +512,83 @@
     else if(zone===1){vlvl=1;vtxt="보통 운동 — 회복·균형 유지";}
     else {vlvl=0;vtxt="가벼운 운동 — 잘 분배된 훈련";}
     $("verdict-wrap").innerHTML=verdictHTML(vlvl,"오늘은 '"+zoneName+"' · "+vtxt);
+    lastPlanArgs=[dist,avgPace,thr,zone];
     buildPlan(dist,avgPace,thr,zone);
   }
   function buildPlan(dist,avgPace,thr,zone){
     if(!dist||dist<=0)dist=8; if(!thr||thr<=0)thr=5;
     var ap=avgPace>0?avgPace:0;
     var easyP=Math.max(thr+1.25,ap+0.17),longP=Math.max(thr+1.5,ap+0.08),tempoP=thr+0.12,intP=thr-0.25;
+    var p5k=thr-0.25,p10k=thr-0.08,pMara=thr+0.55; // 역치속도 기준 근사 목표 페이스
     function pr(p){return min2pace(p)+"/km";}
     var longD=Math.round(Math.min(dist*1.1,dist+dist*0.1)*10)/10;if(longD<dist)longD=dist;
     var easyD=Math.max(3,Math.round(dist*0.6*10)/10),midD=Math.max(4,Math.round(dist*0.8*10)/10);
+    // 목적별 설정: 핵심 훈련(질 세션)·롱런 안내·크로스데이·주의사항 한 줄
+    var G={
+      base:{name:"부상예방(기본)",
+        q:["빠르게-천천히 반복 (속도 운동)","웜업 후 (400m 빠르게 "+pr(intP)+" + 200m 조깅) ×5~6"],
+        qEz:["조금 빠르게 (속도 운동)","웜업 후 <b>"+Math.max(3,Math.round(dist*0.5))+"km</b> · "+pr(tempoP)],
+        longNote:"", cross:["휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"], caution:""},
+      "5k":{name:"5km",
+        q:["5km 대비 인터벌","웜업 후 (400m 빠르게 "+pr(p5k-0.08)+" + 200m 조깅) ×6~8 · 마지막에 전력 80% 질주 15초 ×4"],
+        qEz:["짧은 인터벌 (가볍게)","웜업 후 (400m "+pr(p5k)+" + 200m 조깅) ×4"],
+        longNote:" · 5km 목표는 롱런 10~12km면 충분",
+        cross:["휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"],
+        caution:"<b>5km 목표:</b> 인터벌은 주 1회만 — 빠른 훈련이 늘수록 나머지는 더 느리게."},
+      "10k":{name:"10km",
+        q:["10km 대비 인터벌","웜업 후 (1km "+pr(p10k)+" + 400m 조깅) ×4~5"],
+        qEz:["크루즈 인터벌 (가볍게)","웜업 후 (1km "+pr(tempoP)+" + 400m 조깅) ×3"],
+        longNote:" · 10km 목표는 몇 주에 걸쳐 12~14km까지",
+        cross:["휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"],
+        caution:"<b>10km 목표:</b> 1km 반복은 주 1회만, 반복 사이 회복 조깅을 줄이지 말 것."},
+      half:{name:"하프",
+        q:["템포런 (하프 대비)","웜업 후 <b>"+Math.max(5,Math.round(dist*0.6))+"km</b> 연속 · "+pr(tempoP)],
+        qEz:["짧은 템포 (가볍게)","웜업 후 <b>"+Math.max(3,Math.round(dist*0.4))+"km</b> · "+pr(tempoP)],
+        longNote:" · 하프 목표는 매주 10% 이내로 늘려 18~20km까지",
+        cross:["휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"],
+        caution:"<b>하프 목표:</b> 템포런은 주 1회 — 롱런과 템포런 사이 최소 2일 간격."},
+      full:{name:"풀코스",
+        q:["마라톤 페이스 러닝","웜업 후 <b>"+midD+"km</b> · "+pr(pMara)+" (대회 목표 감각 익히기)"],
+        qEz:["마라톤 페이스 (짧게)","웜업 후 <b>"+easyD+"km</b> · "+pr(pMara)],
+        longNote:" · 풀 목표는 매주 10% 이내로 늘려 30~32km까지 (대회 3주 전 마지막)",
+        cross:["휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"],
+        caution:"<b>풀코스 목표:</b> 30km 이상 롱런은 대회 3주 전까지만 · 롱런 중 연료(젤·물) 연습 필수."},
+      hyrox:{name:"하이록스",
+        q:["브릭: 달리기+기능성","(1km "+pr(p10k)+" + 스테이션 2분: 월볼·런지·버피 중 택1) ×4~6 — 지친 다리로 달리는 감각"],
+        qEz:["가벼운 브릭","(1km "+pr(tempoP)+" + 스테이션 90초 가볍게) ×3"],
+        longNote:" · 하이록스는 롱런 10~12km면 충분, 대신 근력 유지",
+        cross:["기능성 근력 세션","스쿼트·런지·파머스캐리·로잉 40분 (중량은 대화 가능한 수준)","mod"],
+        caution:"<b>하이록스 목표:</b> 근력 세션과 힘든 러닝(브릭) 사이 최소 하루 간격 — 같은 날 몰지 말 것."}
+    };
+    var g=G[goal]||G.base;
     var rows;
     if(zone>=2){rows=[
       ["1일차 (오늘)","마친 운동","휴식·수분·단백질 보충","rest"],
       ["2일차","가벼운 조깅","<b>"+easyD+"km</b> · "+pr(easyP)+" (대화 가능 속도)","easy"],
       ["3일차","휴식 / 가벼운 다른 운동","수영·자전거 30~40분 또는 휴식","rest"],
       ["4일차","가벼운 러닝","<b>"+midD+"km</b> · "+pr(easyP),"easy"],
-      ["5일차","조금 빠르게 (속도 운동)","웜업 후 <b>"+Math.max(3,Math.round(dist*0.5))+"km</b> · "+pr(tempoP),"mod"],
+      ["5일차",g.qEz[0],g.qEz[1],"mod"],
       ["6일차","가벼운 러닝","<b>"+easyD+"km</b> · "+pr(easyP),"easy"],
-      ["7일차","길게 달리기","<b>"+longD+"km</b> · "+pr(longP)+" (이번 주 최장, 지난주보다 10% 이내)","easy"]];}
+      ["7일차","길게 달리기","<b>"+longD+"km</b> · "+pr(longP)+" (이번 주 최장, 지난주보다 10% 이내"+g.longNote+")","easy"]];}
     else {rows=[
       ["1일차 (오늘)","마친 운동","가벼운 정리운동","rest"],
       ["2일차","가벼운 러닝","<b>"+midD+"km</b> · "+pr(easyP),"easy"],
-      ["3일차","빠르게-천천히 반복 (속도 운동)","웜업 후 (400m 빠르게 "+pr(intP)+" + 200m 조깅) ×5~6","hard"],
+      ["3일차",g.q[0],g.q[1],"hard"],
       ["4일차","가벼운 조깅","<b>"+easyD+"km</b> · "+pr(easyP),"easy"],
-      ["5일차","휴식 / 가벼운 다른 운동","수영·자전거 또는 휴식","rest"],
+      ["5일차",g.cross[0],g.cross[1],g.cross[2]],
       ["6일차","가벼운 러닝","<b>"+midD+"km</b> · "+pr(easyP),"easy"],
-      ["7일차","길게 달리기","<b>"+longD+"km</b> · "+pr(longP)+" (이번 주 최장, 지난주보다 10% 이내)","easy"]];}
-    $("plan-intro").textContent="대부분 편하게(80) · 힘든 운동은 조금만(20) · 한 주 거리 늘림 10% 이내 · 3주 늘리고 1주 쉬기.";
+      ["7일차","길게 달리기","<b>"+longD+"km</b> · "+pr(longP)+" (이번 주 최장, 지난주보다 10% 이내"+g.longNote+")","easy"]];}
+    $("plan-intro").innerHTML="<b>프로그램: "+(goal==="base"?"부상예방(기본)":"부상예방 + "+g.name)+"</b> · 대부분 편하게(80) · 힘든 운동은 조금만(20) · 한 주 거리 늘림 10% 이내 · 3주 늘리고 1주 쉬기.";
     var tn={easy:"가벼움",hard:"힘듦",mod:"보통",rest:"휴식"};
     $("plan").querySelector("tbody").innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+' <span class="tag t-'+r[3]+'">'+tn[r[3]]+'</span></td><td>'+r[2]+'</td></tr>';}).join("");
-    $("cautions").innerHTML=[
+    var cautions=[
       "<b>하루에 너무 무리하지 않기:</b> 한 번의 러닝이 최근 한 달 최장 거리의 <b>110%</b>를 넘지 않게 (Nielsen 2025).",
       "<b>대부분 편하게:</b> 한 주 운동의 약 80%는 대화 가능한 느린 속도로.",
       "<b>3주 늘리고 1주 쉬기:</b> 힘줄·뼈가 따라올 시간을 줍니다.",
       "한 주 거리 늘림은 <b>10% 이내</b>. 통증이 2~3일 가면 거리를 줄이고 점검 (힘줄 적응은 최소 12주)."
-    ].map(function(x){return "<li>"+x+"</li>";}).join("");
+    ];
+    if(g.caution)cautions.push(g.caution);
+    $("cautions").innerHTML=cautions.map(function(x){return "<li>"+x+"</li>";}).join("");
   }
 
   /* tabs */
