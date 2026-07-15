@@ -414,7 +414,15 @@
     if(o.avg_hr_bpm!=null)$("hr").value=Math.round(o.avg_hr_bpm);
     if(o.avg_power_w!=null)$("pw").value=Math.round(o.avg_power_w);
     if(o.cadence_spm!=null)$("cad").value=Math.round(o.cadence_spm);
-    $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 사진에서 읽었어요 — 값 확인 후 아래 버튼을 누르세요</span>';
+    // 심박존별 시간 화면이면 → TRIMP 탭 자동 채움 + 계산
+    var zs=[o.zone1_min,o.zone2_min,o.zone3_min,o.zone4_min,o.zone5_min];
+    var hasZ=zs.some(function(v){return v!=null&&v>0;});
+    if(hasZ){
+      for(var i=0;i<5;i++)$("z"+(i+1)).value=zs[i]!=null?Math.round(zs[i]*10)/10:0;
+      calcTrimp();
+      if(o.duration_min==null){var tot=zs.reduce(function(a,b){return a+(b||0);},0);if(tot>0)$("dur").value=min2dur(tot);}
+    }
+    $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 사진에서 읽었어요'+(hasZ?' · 심박존 인식 → 심박 부하(TRIMP) 자동 계산됨':'')+' — 값 확인 후 아래 버튼을 누르세요</span>';
   }
   // 브라우저 내 OCR (서버 없을 때/실패 시 대체)
   function runTesseract(url){
