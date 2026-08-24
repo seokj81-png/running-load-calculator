@@ -545,11 +545,11 @@
     var ap=avgPace>0?avgPace:0;
     var easyP=Math.max(thr+1.25,ap+0.17),longP=Math.max(thr+1.5,ap+0.08),tempoP=thr+0.12,intP=thr-0.25;
     var p5k=thr-0.25,p10k=thr-0.08,pMara=thr+0.55; // 역치속도 기준 근사 목표 페이스
-    function pr(p){return min2pace(p)+"/km";}
+    function pr(p){return "<b>"+min2pace(p)+"/km</b>";}
     // 예상 소요 시간 표기: 60분 미만 "약 46분", 이상 "약 1시간 2분"
     function fmtT(m){m=Math.round(m);if(m<60)return "약 "+m+"분";var h=Math.floor(m/60),r=m%60;return "약 "+h+"시간"+(r?" "+r+"분":"");}
-    function runT(km,p){return " · <span style='color:var(--muted)'>"+fmtT(km*p)+"</span>";}
-    function wuT(m){return " · <span style='color:var(--muted)'>"+fmtT(m)+" (웜업 포함)</span>";}
+    function runT(km,p){return " · <b>"+fmtT(km*p)+"</b>";}
+    function wuT(m){return " · <b>"+fmtT(m)+"</b> (웜업 포함)";}
     var longD=Math.round(Math.min(dist*1.1,dist+dist*0.1)*10)/10;if(longD<dist)longD=dist;
     var easyD=Math.max(3,Math.round(dist*0.6*10)/10),midD=Math.max(4,Math.round(dist*0.8*10)/10);
     var WU=10; // 질 세션 웜업 기본 10분
