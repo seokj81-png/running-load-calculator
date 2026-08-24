@@ -169,12 +169,13 @@
   <div class="card">
     <div class="step">내 기준값 (모르면 그대로 두세요)</div>
     <div class="grid g3">
+      <div><label class="f">나이</label><input type="number" id="age" min="8" max="90" placeholder="예: 45" /></div>
       <div><label class="f"><span class="term" data-t="threshold">역치 속도</span> <span>(분:초/km)</span></label><input type="text" id="thr" value="4:00" /></div>
-      <div><label class="f"><span class="term" data-t="maxhr">최대 심박</span> <span>(bpm)</span></label><input type="number" id="maxhr" value="190" /></div>
+      <div><label class="f"><span class="term" data-t="maxhr">최대 심박</span> <span>(bpm)</span></label><input type="number" id="maxhr" value="190" /><div class="hint" id="maxhr-hint" style="display:none;font-size:11.5px;color:var(--muted);margin-top:4px"></div></div>
       <div class="expert-only"><label class="f"><span class="term" data-t="cp">버틸 수 있는 출력</span> <span>(CP, 와트)</span></label><input type="number" id="cp" value="300" /></div>
       <div class="expert-only"><label class="f"><span class="term" data-t="wprime">여분 에너지</span> <span>(W′, kJ)</span></label><input type="number" id="wprime" value="15" /></div>
     </div>
-    <div class="baserunner">잘 모르는 값은 <b>그대로 두고 진행</b>해도 됩니다. 정확히 알수록 결과가 정밀해집니다.</div>
+    <div class="baserunner">잘 모르는 값은 <b>그대로 두고 진행</b>해도 됩니다. <b>나이를 넣으면 최대 심박을 자동 추정(220−나이)</b>하고, 시계로 잰 실제 최대 심박이 있으면 직접 넣는 게 더 정확합니다.</div>
   </div>
 
   <!-- 5지표 계산기 -->
@@ -470,6 +471,21 @@
     var tw=around(/시간|time/i,30,30);if(tw){var tm=tw.win.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(tm){var th=!!tm[3];$("dur").value=min2dur((th?+tm[1]:0)*60+(th?+tm[2]:+tm[1])+(th?+tm[3]:+tm[2])/60);}}
     var hr=near(/심박|bpm/i,80,215);if(hr!=null)$("hr").value=Math.round(hr);
   }
+
+  /* ---- 나이 → 최대 심박 자동 추정 (220−나이) ---- */
+  $("age").addEventListener("input",function(){
+    var a=num("age");
+    if(a>=8&&a<=90){
+      $("maxhr").value=220-Math.round(a);
+      $("maxhr-hint").style.display="block";
+      $("maxhr-hint").textContent="나이 "+Math.round(a)+" 기준 자동 추정 (직접 잰 값이 있으면 고쳐 쓰세요)";
+      recalcAll();
+    } else {
+      $("maxhr-hint").style.display="none";
+    }
+  });
+  // 최대 심박을 손으로 고치면 자동 추정 안내는 숨김
+  $("maxhr").addEventListener("input",function(){$("maxhr-hint").style.display="none";});
 
   /* ---- 운동 목적 선택 ---- */
   $("goalsel").addEventListener("click",function(e){
