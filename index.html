@@ -401,10 +401,10 @@
       var b64=(String(reader.result).split(",")[1])||"";
       fetch(OCR_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:b64,mime:f.type||"image/jpeg"})})
       .then(function(r){return r.json();})
-      .then(function(o){ if(o&&!o.error){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";fillFromAI(o);} else {runTesseract(url);} })
-      .catch(function(){runTesseract(url);});
+      .then(function(o){ if(o&&!o.error){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";fillFromAI(o);} else {runTesseract(url,true);} })
+      .catch(function(){runTesseract(url,true);});
     };
-    reader.onerror=function(){runTesseract(url);};
+    reader.onerror=function(){runTesseract(url,true);};
     reader.readAsDataURL(f);
   }
   function fillFromAI(o){
@@ -425,12 +425,13 @@
     $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 사진에서 읽었어요'+(hasZ?' · 심박존 인식 → 심박 부하(TRIMP) 자동 계산됨':'')+' — 값 확인 후 아래 버튼을 누르세요</span>';
   }
   // 브라우저 내 OCR (서버 없을 때/실패 시 대체)
-  function runTesseract(url){
+  function runTesseract(url,serverFailed){
     $("ocrpct").textContent="0%";
+    var note='<div style="color:var(--warn);font-weight:700">⚠ 사진 인식 서버에 연결하지 못해 간이 인식으로 대체했습니다 — 값이 비거나 틀릴 수 있으니 직접 확인·입력해 주세요. (심박존 화면은 간이 인식으로 읽지 못합니다)</div>';
     var img=new Image();
     img.onload=function(){var canvas=preprocess(img);
       Tesseract.recognize(canvas,"eng",{logger:function(m){if(m.status==="recognizing text"){var p=Math.round(m.progress*100);$("ocrfill").style.width=p+"%";$("ocrpct").textContent=p+"%";}}})
-      .then(function(res){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";parseData(res.data);}).catch(function(){$("ocrbar").innerHTML='<span style="color:var(--bad)">사진 읽기 실패 — 값을 직접 입력하세요.</span>';});};
+      .then(function(res){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";parseData(res.data);if(serverFailed)$("ocrbar").innerHTML=note;}).catch(function(){$("ocrbar").innerHTML=serverFailed?note:'<span style="color:var(--bad)">사진 읽기 실패 — 값을 직접 입력하세요.</span>';});};
     img.onerror=function(){$("ocrbar").innerHTML='<span style="color:var(--bad)">이미지를 불러올 수 없습니다.</span>';};
     img.src=url;
   }
