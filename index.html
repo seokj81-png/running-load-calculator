@@ -394,19 +394,38 @@
     $("ocrbar").style.display="block";$("ocrfill").style.width="0%";$("ocrpct").textContent="읽는 중…";
     if(OCR_API){ readViaAPI(f,url); } else { runTesseract(url); }
   }
-  // 클로드 비전 서버로 인식 (실패 시 브라우저 OCR로 대체)
+  // AI 비전 서버로 인식 (실패 시 브라우저 OCR로 대체)
+  // 폰 원본 사진(수 MB)도 있으므로 전송 전 긴 변 1600px·JPEG로 축소 → 빠르고 안정적
   function readViaAPI(f,url){
-    $("ocrfill").style.width="50%";
-    var reader=new FileReader();
-    reader.onload=function(){
-      var b64=(String(reader.result).split(",")[1])||"";
-      fetch(OCR_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:b64,mime:f.type||"image/jpeg"})})
+    $("ocrfill").style.width="30%";
+    var img=new Image();
+    img.onload=function(){
+      var b64,mime;
+      try{
+        var scale=Math.min(1,1600/Math.max(img.width,img.height));
+        var c=document.createElement("canvas");
+        c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+        c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+        var durl=c.toDataURL("image/jpeg",0.85);
+        b64=durl.split(",")[1];mime="image/jpeg";
+      }catch(e){b64=null;}
+      if(b64){ send(b64,mime); }
+      else { // 캔버스 실패(특수 포맷 등) 시 원본 그대로 전송
+        var reader=new FileReader();
+        reader.onload=function(){send((String(reader.result).split(",")[1])||"",f.type||"image/jpeg");};
+        reader.onerror=function(){runTesseract(url,true);};
+        reader.readAsDataURL(f);
+      }
+    };
+    img.onerror=function(){runTesseract(url,true);};
+    img.src=url;
+    function send(b64,mime){
+      $("ocrfill").style.width="60%";
+      fetch(OCR_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:b64,mime:mime})})
       .then(function(r){return r.json();})
       .then(function(o){ if(o&&!o.error){$("ocrfill").style.width="100%";$("ocrpct").textContent="완료";fillFromAI(o);} else {runTesseract(url,true);} })
       .catch(function(){runTesseract(url,true);});
-    };
-    reader.onerror=function(){runTesseract(url,true);};
-    reader.readAsDataURL(f);
+    }
   }
   function fillFromAI(o){
     if(o.distance_km!=null)$("dist").value=o.distance_km;
@@ -415,15 +434,21 @@
     if(o.avg_hr_bpm!=null)$("hr").value=Math.round(o.avg_hr_bpm);
     if(o.avg_power_w!=null)$("pw").value=Math.round(o.avg_power_w);
     if(o.cadence_spm!=null)$("cad").value=Math.round(o.cadence_spm);
-    // 심박존별 시간 화면이면 → TRIMP 탭 자동 채움 + 계산
+    // 심박존별 시간 화면이면 → TRIMP 탭 자동 채움 + 계산 + 점수 즉시 표시
     var zs=[o.zone1_min,o.zone2_min,o.zone3_min,o.zone4_min,o.zone5_min];
     var hasZ=zs.some(function(v){return v!=null&&v>0;});
+    var zMsg="";
     if(hasZ){
       for(var i=0;i<5;i++)$("z"+(i+1)).value=zs[i]!=null?Math.round(zs[i]*10)/10:0;
       calcTrimp();
-      if(o.duration_min==null){var tot=zs.reduce(function(a,b){return a+(b||0);},0);if(tot>0)$("dur").value=min2dur(tot);}
+      var tot=zs.reduce(function(a,b){return a+(b||0);},0);
+      if(o.duration_min==null&&tot>0)$("dur").value=min2dur(tot);
+      var trimp=Math.round(zs.reduce(function(a,b,i2){return a+(b||0)*(i2+1);},0));
+      var hardPct=tot>0?Math.round(((zs[3]||0)+(zs[4]||0))/tot*100):0;
+      var hardNote=hardPct>=40?' · 힘든 구간(4~5단계) '+hardPct+'% — 다음 1~2일은 가볍게':hardPct>=25?' · 힘든 구간 '+hardPct+'%':'';
+      zMsg='<div style="margin-top:8px;padding:10px 12px;background:var(--card);border:1.5px solid var(--line);border-radius:10px;font-weight:800">심박 부하(TRIMP) <span style="font-size:20px">'+trimp+'점</span>'+hardNote+'<div style="font-weight:600;font-size:12px;color:var(--muted);margin-top:3px">전문가 버전 ② 심박 부하 탭에 자동 입력됐어요</div></div>';
     }
-    $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 사진에서 읽었어요'+(hasZ?' · 심박존 인식 → 심박 부하(TRIMP) 자동 계산됨':'')+' — 값 확인 후 아래 버튼을 누르세요</span>';
+    $("ocrbar").innerHTML='<span style="color:var(--ok);font-weight:700">✓ 사진에서 읽었어요'+(hasZ?' — 심박존 화면 인식됨':' — 값 확인 후 아래 버튼을 누르세요')+'</span>'+zMsg;
   }
   // 브라우저 내 OCR (서버 없을 때/실패 시 대체)
   function runTesseract(url,serverFailed){
